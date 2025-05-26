@@ -70,6 +70,7 @@ const ChatHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
+TURBULENCE
 `;
 
 const CallButtons = styled.div`
@@ -109,20 +110,20 @@ const MessagesArea = styled.div`
 const Message = styled.div`
   display: flex;
   flex-direction: column;
-  align-items: ${props => props.isFormateur ? 'flex-end' : 'flex-start'};
+  align-items: ${props => props.isAdmin ? 'flex-end' : 'flex-start'};
   margin-bottom: 20px;
   position: relative;
 
   &:hover .message-actions {
-    display: ${props => props.isFormateur ? 'flex' : 'none'};
+    display: ${props => props.isAdmin ? 'flex' : 'none'};
   }
 `;
 
 const MessageBubble = styled.div`
   max-width: 70%;
   padding: 12px 18px;
-  background: ${props => props.isFormateur ? '#4299e1' : '#edf2f7'};
-  color: ${props => props.isFormateur ? 'white' : '#2d3748'};
+  background: ${props => props.isAdmin ? '#4299e1' : '#edf2f7'};
+  color: ${props => props.isAdmin ? 'white' : '#2d3748'};
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   font-size: 1rem;
@@ -373,7 +374,7 @@ const TemporaryMessage = styled.div`
   font-size: 0.95rem;
 `;
 
-const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propFormateurName }) => {
+const DiscussionsContentAdmin = ({ adminId: propAdminId, adminName: propAdminName }) => {
   const [contacts, setContacts] = useState([]);
   const [groups, setGroups] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
@@ -395,8 +396,8 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [emojiError, setEmojiError] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
-  const [formateurId, setFormateurId] = useState(propFormateurId);
-  const [formateurName, setFormateurName] = useState(propFormateurName);
+  const [adminId, setAdminId] = useState(propAdminId);
+  const [adminName, setAdminName] = useState(propAdminName);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const agoraClientRef = useRef(null);
@@ -412,19 +413,18 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
   const getChatId = (id1, id2) => [id1, id2].sort().join('_');
 
   const getInitiatorName = async (initiatorId) => {
-    const userRef = ref(db, `utilisateurs/formateurs/${initiatorId}`);
-    const snapshot = await get(userRef);
-    if (snapshot.exists()) {
-      const data = snapshot.val();
-      return `${data.prenom} ${data.nom}`;
+    try {
+      const userRef = ref(db, `utilisateurs/formateurs/${initiatorId}`);
+      const snapshot = await get(userRef);
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        return `${data.prenom || ''} ${data.nom || 'Inconnu'}`.trim() || initiatorId;
+      }
+      return initiatorId;
+    } catch (err) {
+      console.warn(`Erreur lors de la récupération du nom de l'initiateur : ${err.message}`);
+      return initiatorId;
     }
-    const adminRef = ref(db, `utilisateurs/admin`);
-    const adminSnapshot = await get(adminRef);
-    if (adminSnapshot.exists()) {
-      const data = adminSnapshot.val();
-      return `${data.prenom} ${data.nom}`;
-    }
-    return initiatorId;
   };
 
   const initializeAgora = async () => {
@@ -534,7 +534,7 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
 
   const startCall = async (type) => {
     if (!selectedChat || selectedChat.type === 'group') {
-      setError('Sélectionnez un contact pour appeler.');
+      setError('Sélectionnez un formateur pour appeler.');
       return;
     }
 
@@ -584,10 +584,10 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
       const callId = push(ref(db, 'calls')).key;
       const callRef = ref(db, `calls/${callId}`);
 
-      const recipientName = `${selectedChat.prenom} ${selectedChat.nom}`;
+      const recipientName = `${selectedChat.prenom || ''} ${selectedChat.nom || 'Inconnu'}`.trim();
       await set(callRef, {
-        initiator: formateurId,
-        initiatorName: formateurName,
+        initiator: adminId,
+        initiatorName: adminName,
         recipient: selectedChat.id,
         recipientName,
         type,
@@ -597,7 +597,7 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
         createdAt: serverTimestamp()
       });
 
-      setCallStatus({ callId, type, role: 'initiator', status: 'Appel en cours...', initiatorName: formateurName, recipientName });
+      setCallStatus({ callId, type, role: 'initiator', status: 'Appel en cours...', initiatorName: adminName, recipientName });
 
       const unsubscribe = onValue(callRef, snapshot => {
         if (snapshot.exists()) {
@@ -628,8 +628,9 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
   };
 
   const handleIncomingCall = async (callId, callData) => {
-    const initiatorName = callData.initiatorName || await getInitiatorName(callData.initiator);
-    setIncomingCall({ callId, ...callData, initiatorName });
+    const initiatorId = callData.initiator === 'admin' ? 'ik5yjCUtrOmHyH3ief1Lraqs7mp3' : callData.initiator;
+    const initiatorName = callData.initiatorName || await getInitiatorName(initiatorId);
+    setIncomingCall({ callId, ...callData, initiator: initiatorId, initiatorName });
   };
 
   const acceptCall = async () => {
@@ -685,7 +686,7 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
         recipientUid: uid
       });
 
-      setCallStatus({ callId: incomingCall.callId, type: incomingCall.type, role: 'recipient', status: 'Connecté', initiatorName: incomingCall.initiatorName, recipientName: formateurName });
+      setCallStatus({ callId: incomingCall.callId, type: incomingCall.type, role: 'recipient', status: 'Connecté', initiatorName: incomingCall.initiatorName, recipientName: adminName });
 
       const unsubscribe = onValue(callRef, snapshot => {
         if (snapshot.exists()) {
@@ -721,23 +722,49 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
     try {
       if (agoraClientRef.current) {
         const client = agoraClientRef.current;
-        localTracksRef.current.forEach(track => track.close());
-        await client.unpublish(localTracksRef.current);
-        await client.leave();
-        agoraClientRef.current = null;
+        localTracksRef.current.forEach(track => {
+          try {
+            track.close();
+          } catch (err) {
+            console.warn(`Erreur lors de la fermeture de la piste : ${err.message}`);
+          }
+        });
         localTracksRef.current = [];
+        if (client.connectionState === 'CONNECTED') {
+          try {
+            await client.unpublish();
+          } catch (err) {
+            console.warn(`Erreur lors de la dépublication : ${err.message}`);
+          }
+        }
+        try {
+          await client.leave();
+        } catch (err) {
+          console.warn(`Erreur lors de la sortie du canal : ${err.message}`);
+        }
+        agoraClientRef.current = null;
       }
       if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
+        localStream.getTracks().forEach(track => {
+          try {
+            track.stop();
+          } catch (err) {
+            console.warn(`Erreur lors de l'arrêt de la piste média : ${err.message}`);
+          }
+        });
         setLocalStream(null);
       }
       setRemoteStream(null);
       if (callStatus?.callId) {
-        await set(ref(db, `calls/${callStatus.callId}`), {
-          ...callStatus,
-          status: 'ended',
-          endedAt: serverTimestamp()
-        });
+        const callRef = ref(db, `calls/${callStatus.callId}`);
+        const snapshot = await get(callRef);
+        if (snapshot.exists()) {
+          await set(callRef, {
+            ...snapshot.val(),
+            status: 'ended',
+            endedAt: serverTimestamp()
+          });
+        }
       }
       setCallStatus(null);
       setIncomingCall(null);
@@ -757,39 +784,45 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
   useEffect(() => {
     const auth = getAuth();
     const unsubscribe = onAuthStateChanged(auth, async user => {
-      if (user) {
-        setFormateurId(user.uid);
-        setFormateurName(user.displayName || propFormateurName || 'Formateur Inconnu');
+      if (user && user.uid === 'ik5yjCUtrOmHyH3ief1Lraqs7mp3') {
+        setAdminId(user.uid);
+        setAdminName(user.displayName || propAdminName || 'Ouissal Brahmi');
         setAuthChecked(true);
       } else {
         try {
-          const formateurRef = ref(db, `utilisateurs/formateurs/${propFormateurId}`);
-          const snapshot = await get(formateurRef);
+          const adminRef = ref(db, 'utilisateurs/admin');
+          const snapshot = await get(adminRef);
           if (snapshot.exists()) {
-            const formateurData = snapshot.val();
-            setFormateurId(propFormateurId);
-            setFormateurName(`${formateurData.prenom} ${formateurData.nom}`);
-            setAuthChecked(true);
+            const adminData = snapshot.val();
+            if (adminData.id === 'ik5yjCUtrOmHyH3ief1Lraqs7mp3') {
+              setAdminId(adminData.id);
+              setAdminName(`${adminData.prenom || 'Ouissal'} ${adminData.nom || 'Brahmi'}`);
+              setAuthChecked(true);
+            } else {
+              setError('Utilisateur non autorisé. Veuillez vous connecter avec le compte administrateur.');
+              setAuthChecked(true);
+              setLoading(false);
+            }
           } else {
-            setError('Utilisateur non trouvé. Veuillez vous connecter.');
+            setError('Aucun administrateur trouvé dans la base de données. Veuillez vous connecter.');
             setAuthChecked(true);
             setLoading(false);
           }
         } catch (err) {
-          setError(`Erreur lors de la vérification du formateur : ${err.message}`);
+          setError(`Erreur lors de la vérification de l'administrateur : ${err.message}`);
           setAuthChecked(true);
           setLoading(false);
         }
       }
     });
     return () => unsubscribe();
-  }, [propFormateurId, propFormateurName]);
+  }, [propAdminName]);
 
   useEffect(() => {
-    if (!formateurId || !authChecked) return;
+    if (!adminId || !authChecked) return;
 
     const callsRef = ref(db, 'calls');
-    const incomingQuery = query(callsRef, orderByChild('recipient'), equalTo(formateurId));
+    const incomingQuery = query(callsRef, orderByChild('recipient'), equalTo(adminId));
 
     const unsubscribe = onValue(incomingQuery, snapshot => {
       if (snapshot.exists()) {
@@ -803,48 +836,33 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
     });
 
     return () => unsubscribe();
-  }, [formateurId, callStatus, incomingCall, authChecked]);
+  }, [adminId, callStatus, incomingCall, authChecked]);
 
   useEffect(() => {
     const fetchContactsAndGroups = async () => {
       setLoading(true);
       try {
         const contactsList = [];
-        const studentIds = new Set();
 
-        // Fetch admin
-        const adminRef = ref(db, 'utilisateurs/admin');
-        const adminSnapshot = await get(adminRef);
-        if (adminSnapshot.exists()) {
-          const adminData = adminSnapshot.val();
-          contactsList.push({
-            id: adminData.id || 'ik5yjCUtrOmHyH3ief1Lraqs7mp3',
-            nom: adminData.nom || 'Inconnu',
-            prenom: adminData.prenom || '',
-            type: 'admin',
-            online: false
+        // Fetch only active formateurs
+        const formateursRef = ref(db, 'utilisateurs/formateurs');
+        const formateursSnapshot = await get(formateursRef);
+        if (formateursSnapshot.exists()) {
+          formateursSnapshot.forEach(formateur => {
+            const data = formateur.val();
+            // Only include formateurs with status === "active"
+            if (data.status === 'active') {
+              contactsList.push({
+                id: formateur.key,
+                nom: data.nom || 'Inconnu',
+                prenom: data.prenom || '',
+                type: 'formateur',
+                online: data.online || false // Use online status if available
+              });
+            }
           });
-        }
-
-        // Fetch students enrolled in the formateur's courses
-        const inscriptionsRef = ref(db, 'inscriptions');
-        const inscriptionsSnapshot = await get(inscriptionsRef);
-        if (inscriptionsSnapshot.exists()) {
-          inscriptionsSnapshot.forEach(student => {
-            student.forEach(inscription => {
-              const data = inscription.val();
-              if (data.formateur?.id === formateurId && !studentIds.has(student.key)) {
-                contactsList.push({
-                  id: student.key,
-                  nom: data.etudiant?.nom || 'Inconnu',
-                  prenom: data.etudiant?.prenom || '',
-                  type: 'student',
-                  online: false
-                });
-                studentIds.add(student.key);
-              }
-            });
-          });
+        } else {
+          console.warn('Aucun formateur trouvé dans la base de données.');
         }
 
         // Fetch groups
@@ -854,12 +872,12 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
         if (groupsSnapshot.exists()) {
           groupsSnapshot.forEach(group => {
             const groupData = group.val();
-            if (groupData.members && groupData.members[formateurId]) {
+            if (groupData.members && groupData.members[adminId]) {
               groupsList.push({
                 id: group.key,
-                name: groupData.name,
+                name: groupData.name || 'Groupe sans nom',
                 type: 'group',
-                courseId: groupData.courseId
+                courseId: groupData.courseId || ''
               });
             }
           });
@@ -867,24 +885,28 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
 
         setContacts(contactsList);
         setGroups(groupsList);
-        if (contactsList.length > 0) setSelectedChat(contactsList[0]);
+        if (contactsList.length > 0) {
+          setSelectedChat(contactsList[0]);
+        } else if (groupsList.length > 0) {
+          setSelectedChat(groupsList[0]);
+        }
         setLoading(false);
       } catch (err) {
-        setError(`Erreur lors du chargement des contacts : ${err.message}`);
+        setError(`Erreur lors du chargement des formateurs et groupes : ${err.message}`);
         setLoading(false);
       }
     };
 
-    if (formateurId && authChecked) {
+    if (adminId && authChecked) {
       fetchContactsAndGroups();
     } else if (authChecked) {
-      setError('Identifiant formateur manquant. Veuillez vous reconnecter.');
+      setError('Identifiant administrateur manquant. Veuillez vous reconnecter.');
       setLoading(false);
     }
-  }, [formateurId, authChecked]);
+  }, [adminId, authChecked]);
 
   useEffect(() => {
-    if (!selectedChat || !formateurId) return;
+    if (!selectedChat || !adminId) return;
 
     const unsubscribeList = [];
 
@@ -904,6 +926,8 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
             }, {});
             return Object.values(combined).sort((a, b) => a.timestamp - b.timestamp);
           });
+        } else {
+          setMessages([]);
         }
       });
       unsubscribeList.push(unsubscribe);
@@ -912,16 +936,12 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
     if (selectedChat.type === 'group') {
       fetchMessages(`messages/groups/${selectedChat.id}`);
     } else {
-      const standardChatId = getChatId(formateurId, selectedChat.id);
-      fetchMessages(`messages/${standardChatId}`);
-      if (selectedChat.type === 'admin') {
-        const legacyChatId = `admin_${formateurId}`;
-        fetchMessages(`messages/${legacyChatId}`);
-      }
+      const chatId = getChatId(adminId, selectedChat.id);
+      fetchMessages(`messages/${chatId}`);
     }
 
     return () => unsubscribeList.forEach(unsubscribe => unsubscribe());
-  }, [selectedChat, formateurId]);
+  }, [selectedChat, adminId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -932,13 +952,13 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
 
     const chatId = selectedChat.type === 'group'
       ? `groups/${selectedChat.id}`
-      : getChatId(formateurId, selectedChat.id);
+      : getChatId(adminId, selectedChat.id);
     const messagesRef = ref(db, `messages/${chatId}`);
     const newMessageRef = push(messagesRef);
 
     try {
       await set(newMessageRef, {
-        sender: formateurId,
+        sender: adminId,
         text: newMessage,
         timestamp: Date.now()
       });
@@ -960,12 +980,12 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
 
     const chatId = selectedChat.type === 'group'
       ? `groups/${selectedChat.id}`
-      : getChatId(formateurId, selectedChat.id);
+      : getChatId(adminId, selectedChat.id);
     const messageRef = ref(db, `messages/${chatId}/${messageId}`);
 
     try {
       await set(messageRef, {
-        sender: formateurId,
+        sender: adminId,
         text: editText,
         timestamp: Date.now()
       });
@@ -979,14 +999,14 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
 
   const handleDeleteMessage = async (messageId) => {
     if (!selectedChat) {
-      setTemporaryMessage('Veuillez sélectionner un contact ou un groupe.');
+      setTemporaryMessage('Veuillez sélectionner un formateur ou un groupe.');
       setTimeout(() => setTemporaryMessage(null), 3000);
       return;
     }
 
     const chatId = selectedChat.type === 'group'
       ? `groups/${selectedChat.id}`
-      : getChatId(formateurId, selectedChat.id);
+      : getChatId(adminId, selectedChat.id);
     const messageRef = ref(db, `messages/${chatId}/${messageId}`);
 
     try {
@@ -1123,7 +1143,7 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
               onClick={() => setSelectedChat(contact)}
             >
               <OnlineIndicator online={contact.online} />
-              <ChatName>{contact.prenom} {contact.nom} ({contact.type})</ChatName>
+              <ChatName>{contact.prenom} {contact.nom} (Formateur)</ChatName>
             </ChatItem>
           ))}
           {groups.map(group => (
@@ -1143,7 +1163,7 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
               <ChatHeader>
                 {selectedChat.type === 'group'
                   ? selectedChat.name
-                  : `${selectedChat.prenom} ${selectedChat.nom}`}
+                  : `${selectedChat.prenom || ''} ${selectedChat.nom || 'Inconnu'}`.trim()}
                 {selectedChat.type !== 'group' && (
                   <CallButtons>
                     <CallButton
@@ -1165,11 +1185,11 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
               {temporaryMessage && <TemporaryMessage>{temporaryMessage}</TemporaryMessage>}
               <MessagesArea>
                 {messages.map(message => (
-                  <Message key={message.id} isFormateur={message.sender === formateurId}>
-                    <MessageBubble isFormateur={message.sender === formateurId}>
+                  <Message key={message.id} isAdmin={message.sender === adminId}>
+                    <MessageBubble isAdmin={message.sender === adminId}>
                       {message.text}
                     </MessageBubble>
-                    {message.sender === formateurId && (
+                    {message.sender === adminId && (
                       <MessageActions className="message-actions">
                         <ActionButton onClick={() => handleEditMessage(message)}>Modifier</ActionButton>
                         <ActionButton onClick={() => handleDeleteMessage(message.id)}>Supprimer</ActionButton>
@@ -1210,7 +1230,7 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
           ) : (
             <MessagesArea>
               <div style={{ textAlign: 'center', padding: '30px', color: '#2d3748', fontSize: '1.2rem' }}>
-                Sélectionnez un contact ou un groupe pour commencer la discussion
+                Sélectionnez un formateur ou un groupe pour commencer la discussion
               </div>
             </MessagesArea>
           )}
@@ -1220,4 +1240,4 @@ const DiscussionsContent = ({ formateurId: propFormateurId, formateurName: propF
   );
 };
 
-export default DiscussionsContent;
+export default DiscussionsContentAdmin;
